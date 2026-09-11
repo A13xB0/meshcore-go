@@ -60,6 +60,28 @@ jobs:
       - name: Test with race detector
         run: go test -race ./...
 
+  test-openhop:
+    name: Test openHop
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: hardware/openhop
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: hardware/openhop/go.mod
+
+      - name: Build
+        run: go build ./...
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test with race detector
+        run: go test -race ./...
+
   test-transport:
     name: Test Transport
     runs-on: ubuntu-latest

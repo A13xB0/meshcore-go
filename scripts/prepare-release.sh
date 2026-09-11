@@ -30,6 +30,7 @@ SUBMODULES=(
   companion/transport
   hardware/transport
   hardware/sx12xx
+  hardware/openhop
 )
 
 if [ -n "$(git status --porcelain)" ]; then

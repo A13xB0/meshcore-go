@@ -29,6 +29,7 @@ jobs:
           git tag "companion/transport/${VERSION}"
           git tag "hardware/transport/${VERSION}"
           git tag "hardware/sx12xx/${VERSION}"
+          git tag "hardware/openhop/${VERSION}"
 
       - name: Push submodule tags
         run: |
@@ -36,6 +37,7 @@ jobs:
           git push origin "companion/transport/${VERSION}"
           git push origin "hardware/transport/${VERSION}"
           git push origin "hardware/sx12xx/${VERSION}"
+          git push origin "hardware/openhop/${VERSION}"
 
       - name: Create GitHub Release
         run: |

@@ -30,6 +30,11 @@ meshcore-go/
       sx126x*.go, sx127x*.go  # SPI drivers for the SX126x and SX127x families
       lbt.go                  # Listen-before-talk, current RSSI, AGC reset
       modem.go                # Modem: adapts an SPI radio to node.Modem
+    openhop/                  # Separate module (own go.mod, brings in go.bug.st/serial)
+      protocol.go             # openHop Modem wire protocol: frames, CRC, payloads
+      parser.go               # Streaming frame parser with resync
+      transport.go            # USB-CDC / UART and TCP dialers
+      modem.go                # Modem: handshake, reconnect, LBT, node.Modem
   node/
     node.go                   # Node: identity, options, send helpers, lifecycle
     router.go                 # Flood/direct routing and forwarding policy
@@ -58,6 +63,9 @@ go get github.com/meshcore-go/meshcore-go/hardware/transport
 
 # SPI radios on a Pi hat are a separate module (brings in periph.io)
 go get github.com/meshcore-go/meshcore-go/hardware/sx12xx
+
+# openHop Modem firmware over USB or TCP is a separate module
+go get github.com/meshcore-go/meshcore-go/hardware/openhop
 ```
 
 ## Quick Start
@@ -292,6 +300,41 @@ Data handlers run synchronously on the receive goroutine, so a slow one costs pa
 `Modem.NoiseFloor` and `Modem.PacketScore` report what a stats or packet-log consumer needs without it having to carry the radio config around; the score uses the spreading factor the radio is configured with and pairs with `node.RxDelayForScore`.
 
 Pass `modem.AirtimeEstimator()` to `node.WithMuxAirtimeEstimator` and `node.WithAirtimeEstimator` so the TX budget and relay timing match the radio's actual modulation.
+
+### openHop modems (`hardware/openhop`)
+
+A separate module, because it brings in `go.bug.st/serial`. It drives an [openHop Modem](https://github.com/openhop-dev/openhop_modem), an ESP32 or nRF52 board running that firmware in front of an SX1262, over USB-CDC, its protocol UART, or TCP. The modem owns the physical layer only: transmit, receive, CAD and the LoRa parameters. Routing, encryption and retransmission stay here.
+
+| Type | Description |
+|------|-------------|
+| `Modem` | The driver: handshake, automatic reconnection, listen-before-talk, every firmware command; satisfies `node.Modem` |
+| `Config`, `LBTConfig` | Token, radio parameters and the listen-before-talk budget |
+| `Dialer`, `TCPDialer`, `SerialDialer` | How one connection is opened, called again for every reconnection |
+| `RadioConfig`, `Status`, `DebugInfo`, `WiFiStatus`, `CADParams` | The wire payloads, with their parsers |
+
+The wire format is `SYNC 0xAA | CMD | LEN (2 B LE) | PAYLOAD | CRC-16/CCITT-FALSE (2 B LE)`, the CRC over everything but the sync byte. It is not KISS and shares nothing with `hardware`: SNR arrives scaled by ten rather than MeshCore's quarter-dB, and RSSI as a signed 16-bit dBm value.
+
+```go
+m := openhop.New(openhop.TCPDialer("192.168.1.50:5055", 0), openhop.Config{
+    Token: "",  // empty matches a modem with no token configured
+    Radio: openhop.RadioConfig{
+        FreqHz: 869_618_000, BandwidthHz: 62_500, SF: 8, CR: 8,
+        TxPower: 22, SyncWord: 0x12, PreambleLen: 16,
+    },
+})
+if err := m.Connect(ctx); err != nil { /* the worker keeps retrying */ }
+mux := node.NewRadioMux(m, node.WithMuxAirtimeEstimator(m.AirtimeEstimator()))
+```
+
+`Connect` authenticates when a token is set, pings, and pushes the radio configuration; it returns that handshake's outcome but starts the reconnection worker either way, so a modem that is not up yet is waited for rather than fatal. Commands return `ErrNotConnected` until it answers. Reconnection backs off 1, 2, 5, 10 then 30 seconds, and re-runs the whole handshake, because the modem may have rebooted: the radio configuration, the CAD thresholds and the auto-CAD setting are all re-pushed from what the host last asked for, whether through `Config` or a later `SetConfig`, `SetCADParams` or `SetAutoCAD`. A command in flight when the link drops ends with `ErrDisconnected` rather than waiting out its timeout.
+
+`SendData` bounds listen-before-talk in time rather than attempts, so an occupation longer than the budget cannot leave two neighbours transmitting in lockstep: CAD scans with a jittered 200 ms retry for four seconds, then transmits anyway (`TxResult.Forced`). With `WithAutoCAD` the modem runs its own scan before every transmission and refuses a busy channel with `ERR_CHANNEL_BUSY`; that is listen-before-talk feedback rather than a failure, so it is retried out of the same budget and counted in `TxResult.ModemRefusals`. `Send` returns the airtime the modem measured along with what the attempt cost. Receive is re-armed after every transmission, successful or not, because the firmware parks the radio to transmit.
+
+Transactions are serialized: the protocol carries no correlation id, so a second concurrent command could not tell whose answer arrived. Received packets and the firmware's asynchronous log lines are dispatched on the modem's own goroutine rather than the read loop, so a data handler can transmit, an ACK say, without deadlocking against its own response. `WithInboundBuffer` sizes that queue; a handler too slow to keep up costs the oldest packets, counted in `Stats().InboundDropped`.
+
+Wi-Fi provisioning (`SetWiFi`, `WiFiStatus`, `WiFiReset`) and the OTA commands are implemented as the firmware defines them. Current firmware answers every OTA command with `OTAUnsupported`: the flash writer is not written yet. `EnterBootloader` is nRF52-only and resets the board immediately after acknowledging.
+
+None of this has been run against hardware. It follows `firmware/include/protocol.h`, `src/main.cpp` and `src/tcp_server.cpp`, and the reference host driver in openhop_core.
 
 ### Node runtime (`node`)
 
