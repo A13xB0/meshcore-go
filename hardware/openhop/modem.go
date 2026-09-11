@@ -638,7 +638,9 @@ func (m *Modem) request(ctx context.Context, cmd byte, payload []byte, expect by
 // transact runs one command without the readiness check, for the handshake
 // that establishes it. Transactions are serialized: the protocol carries no
 // correlation id, so a second concurrent command could not tell whose answer
-// arrived.
+// arrived. For the same reason a reply to a command that has already timed out
+// is discarded while nothing is outstanding, but is adopted by the next
+// command waiting on that response byte.
 func (m *Modem) transact(ctx context.Context, cmd byte, payload []byte, expect byte, timeout time.Duration) ([]byte, error) {
 	m.cmdMu.Lock()
 	defer m.cmdMu.Unlock()
