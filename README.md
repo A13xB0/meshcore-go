@@ -334,7 +334,7 @@ Transactions are serialized: the protocol carries no correlation id, so a second
 
 Wi-Fi provisioning (`SetWiFi`, `WiFiStatus`, `WiFiReset`) and the OTA commands are implemented as the firmware defines them. Current firmware answers every OTA command with `OTAUnsupported`: the flash writer is not written yet. `EnterBootloader` is nRF52-only and resets the board immediately after acknowledging.
 
-None of this has been run against hardware. It follows `firmware/include/protocol.h`, `src/main.cpp` and `src/tcp_server.cpp`, and the reference host driver in openhop_core.
+It follows `firmware/include/protocol.h`, `src/main.cpp` and `src/tcp_server.cpp`, and the reference host driver in openhop_core, and has been run against modem hardware through OwlShack.
 
 ### Node runtime (`node`)
 
