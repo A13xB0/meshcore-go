@@ -22,8 +22,9 @@ type TxStats struct {
 	Failed        uint64
 	QueueRejected uint64
 
-	// FailedInARow counts send attempts since the last one that went out, busy retries included; FailingSince is when the first of them was, zero once one succeeds.
+	// FailedInARow counts send attempts since the last success, busy retries included.
 	FailedInARow uint64
+	// FailingSince is when that streak began, zero when FailedInARow is.
 	FailingSince time.Time
 }
 
@@ -196,7 +197,7 @@ func (e *txEngine) drain() {
 		err := e.sendFn(popped.data)
 
 		if err != nil {
-			// Start before count, so stats never pairs a new streak with a stale start; drain is the only writer.
+			// Store the start before the count, which stats reads first; drain is the only writer.
 			if e.failedInARow.Load() == 0 {
 				e.failingSince.Store(sendStart.UnixNano())
 			}

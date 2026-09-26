@@ -323,7 +323,6 @@ func TestModem_MetadataCallbacksDoNotBlockReader(t *testing.T) {
 	}
 }
 
-// A send refused because the last TX is unresolved never reached the radio; the TX engine retries it every 200 ms, and one real log once showed a packet "sent" 196 times in 46 s.
 func TestModem_RefusedSendIsNotReportedAsOutbound(t *testing.T) {
 	tr := newNotifiedTransport()
 	m := NewKissModem(tr, WithTxFlowControl(10*time.Millisecond))

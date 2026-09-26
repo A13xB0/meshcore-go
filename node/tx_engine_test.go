@@ -379,7 +379,6 @@ func TestTxEngine_RequeuesOnTxPending(t *testing.T) {
 	}
 }
 
-// A send the modem keeps refusing is retried forever; FailingSince is what tells a stuck transmitter from a quiet one, and it must clear on the first send that goes out.
 func TestTxEngine_Stats_FailingSinceClearsOnSuccess(t *testing.T) {
 	done := make(chan struct{})
 	defer close(done)

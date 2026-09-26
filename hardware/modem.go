@@ -517,7 +517,6 @@ func (m *KissModem) SendData(data []byte) error {
 		m.txPending = result
 		m.txMu.Unlock()
 	}
-	// Past the refusals, so a send held off by an unresolved TX is not reported once per retry.
 	m.outboundMu.RLock()
 	handlers := m.outboundH
 	m.outboundMu.RUnlock()
