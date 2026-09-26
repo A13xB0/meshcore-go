@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -319,5 +320,26 @@ func TestModem_MetadataCallbacksDoNotBlockReader(t *testing.T) {
 	txDone(tr, 1)
 	if err := waitResult(t, result); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// A send refused because the last TX is unresolved never reached the radio; the TX engine retries it every 200 ms, and one real log once showed a packet "sent" 196 times in 46 s.
+func TestModem_RefusedSendIsNotReportedAsOutbound(t *testing.T) {
+	tr := newNotifiedTransport()
+	m := NewKissModem(tr, WithTxFlowControl(10*time.Millisecond))
+	defer m.Close()
+	var seen atomic.Int32
+	m.AddOutboundHandler(func([]byte) { seen.Add(1) })
+	if err := m.SendData([]byte{1}); !errors.Is(err, ErrTxTimeout) {
+		t.Fatal(err)
+	}
+	waitWrite(t, tr)
+	for range 3 {
+		if err := m.SendData([]byte{2}); !errors.Is(err, ErrTxPending) {
+			t.Fatalf("second TX=%v", err)
+		}
+	}
+	if n := seen.Load(); n != 1 {
+		t.Errorf("outbound handler saw %d frames, want only the 1 written", n)
 	}
 }
