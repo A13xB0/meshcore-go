@@ -287,12 +287,12 @@ func (e *LPPEncoder) AddDigitalOutput(channel byte, value byte) {
 
 func (e *LPPEncoder) AddAnalogInput(channel byte, value float64) {
 	e.writeHeader(channel, LPPAnalogInput)
-	e.writeInt16(int16(value * 100))
+	e.writeInt16(int16(math.Round(value * 100)))
 }
 
 func (e *LPPEncoder) AddAnalogOutput(channel byte, value float64) {
 	e.writeHeader(channel, LPPAnalogOutput)
-	e.writeInt16(int16(value * 100))
+	e.writeInt16(int16(math.Round(value * 100)))
 }
 
 func (e *LPPEncoder) AddGenericSensor(channel byte, value uint32) {
@@ -312,34 +312,34 @@ func (e *LPPEncoder) AddPresence(channel byte, value byte) {
 
 func (e *LPPEncoder) AddTemperature(channel byte, celsius float64) {
 	e.writeHeader(channel, LPPTemperature)
-	e.writeInt16(int16(celsius * 10))
+	e.writeInt16(int16(math.Round(celsius * 10)))
 }
 
 func (e *LPPEncoder) AddRelativeHumidity(channel byte, rh float64) {
 	e.writeHeader(channel, LPPRelativeHumidity)
-	_ = e.buf.WriteByte(byte(rh * 2))
+	_ = e.buf.WriteByte(byte(math.Round(rh * 2)))
 }
 
 func (e *LPPEncoder) AddAccelerometer(channel byte, x, y, z float64) {
 	e.writeHeader(channel, LPPAccelerometer)
-	e.writeInt16(int16(x * 1000))
-	e.writeInt16(int16(y * 1000))
-	e.writeInt16(int16(z * 1000))
+	e.writeInt16(int16(math.Round(x * 1000)))
+	e.writeInt16(int16(math.Round(y * 1000)))
+	e.writeInt16(int16(math.Round(z * 1000)))
 }
 
 func (e *LPPEncoder) AddBarometricPressure(channel byte, hpa float64) {
 	e.writeHeader(channel, LPPBarometricPressure)
-	e.writeUint16(uint16(hpa * 10))
+	e.writeUint16(uint16(math.Round(hpa * 10)))
 }
 
 func (e *LPPEncoder) AddVoltage(channel byte, volts float64) {
 	e.writeHeader(channel, LPPVoltage)
-	e.writeInt16(int16(volts * 100))
+	e.writeInt16(int16(math.Round(volts * 100)))
 }
 
 func (e *LPPEncoder) AddCurrent(channel byte, amps float64) {
 	e.writeHeader(channel, LPPCurrent)
-	e.writeInt16(int16(amps * 1000))
+	e.writeInt16(int16(math.Round(amps * 1000)))
 }
 
 func (e *LPPEncoder) AddFrequency(channel byte, hz uint32) {
@@ -354,7 +354,7 @@ func (e *LPPEncoder) AddPercentage(channel byte, pct byte) {
 
 func (e *LPPEncoder) AddAltitude(channel byte, meters float64) {
 	e.writeHeader(channel, LPPAltitude)
-	e.writeInt16(int16(meters))
+	e.writeInt16(int16(math.Round(meters)))
 }
 
 func (e *LPPEncoder) AddConcentration(channel byte, ppm uint16) {
@@ -369,12 +369,12 @@ func (e *LPPEncoder) AddPower(channel byte, watts uint16) {
 
 func (e *LPPEncoder) AddDistance(channel byte, meters float64) {
 	e.writeHeader(channel, LPPDistance)
-	e.writeUint32(uint32(meters * 1000))
+	e.writeUint32(uint32(math.Round(meters * 1000)))
 }
 
 func (e *LPPEncoder) AddEnergy(channel byte, kwh float64) {
 	e.writeHeader(channel, LPPEnergy)
-	e.writeUint32(uint32(kwh * 1000))
+	e.writeUint32(uint32(math.Round(kwh * 1000)))
 }
 
 func (e *LPPEncoder) AddDirection(channel byte, degrees uint16) {
@@ -389,9 +389,9 @@ func (e *LPPEncoder) AddUnixTime(channel byte, timestamp uint32) {
 
 func (e *LPPEncoder) AddGyrometer(channel byte, x, y, z float64) {
 	e.writeHeader(channel, LPPGyrometer)
-	e.writeInt16(int16(x * 100))
-	e.writeInt16(int16(y * 100))
-	e.writeInt16(int16(z * 100))
+	e.writeInt16(int16(math.Round(x * 100)))
+	e.writeInt16(int16(math.Round(y * 100)))
+	e.writeInt16(int16(math.Round(z * 100)))
 }
 
 func (e *LPPEncoder) AddColour(channel byte, r, g, b byte) {
@@ -403,9 +403,9 @@ func (e *LPPEncoder) AddColour(channel byte, r, g, b byte) {
 
 func (e *LPPEncoder) AddGPS(channel byte, lat, lon, alt float64) {
 	e.writeHeader(channel, LPPGPS)
-	e.writeInt24(int32(lat * 10000))
-	e.writeInt24(int32(lon * 10000))
-	e.writeInt24(int32(alt * 100))
+	e.writeInt24(int32(math.Round(lat * 10000)))
+	e.writeInt24(int32(math.Round(lon * 10000)))
+	e.writeInt24(int32(math.Round(alt * 100)))
 }
 
 func (e *LPPEncoder) AddSwitch(channel byte, value byte) {

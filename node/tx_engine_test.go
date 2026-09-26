@@ -378,3 +378,30 @@ func TestTxEngine_RequeuesOnTxPending(t *testing.T) {
 		t.Fatalf("stats = %+v, want one requeue then one send", s)
 	}
 }
+
+func TestTxEngine_Stats_FailingSinceClearsOnSuccess(t *testing.T) {
+	done := make(chan struct{})
+	defer close(done)
+	var refusing atomic.Bool
+	refusing.Store(true)
+	e := newTxEngine(func([]byte) error {
+		if refusing.Load() {
+			return hardware.ErrTxPending
+		}
+		return nil
+	}, done)
+
+	start := time.Now()
+	e.enqueue([]byte{0x01}, PrioritySend, 0)
+	time.Sleep(500 * time.Millisecond)
+	st := e.stats()
+	if st.FailedInARow < 2 || st.FailingSince.Before(start) || st.FailingSince.After(start.Add(200*time.Millisecond)) {
+		t.Fatalf("while refused: %d in a row since %v, want >= 2 since the first attempt at %v", st.FailedInARow, st.FailingSince, start)
+	}
+
+	refusing.Store(false)
+	time.Sleep(400 * time.Millisecond)
+	if st := e.stats(); st.FailedInARow != 0 || !st.FailingSince.IsZero() || st.Sent != 1 {
+		t.Errorf("after a send went out: %+v, want no failing streak and 1 sent", st)
+	}
+}

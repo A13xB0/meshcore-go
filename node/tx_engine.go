@@ -21,6 +21,11 @@ type TxStats struct {
 	BusyDropped   uint64
 	Failed        uint64
 	QueueRejected uint64
+
+	// FailedInARow counts send attempts since the last success, busy retries included.
+	FailedInARow uint64
+	// FailingSince is when that streak began, zero when FailedInARow is.
+	FailingSince time.Time
 }
 
 type txEngine struct {
@@ -39,6 +44,8 @@ type txEngine struct {
 	statBusyDropped   atomic.Uint64
 	statFailed        atomic.Uint64
 	statQueueRejected atomic.Uint64
+	failedInARow      atomic.Uint64
+	failingSince      atomic.Int64
 }
 
 type txEngineConfig struct {
@@ -117,13 +124,18 @@ func (e *txEngine) enqueue(data []byte, priority uint8, delay time.Duration) boo
 }
 
 func (e *txEngine) stats() TxStats {
-	return TxStats{
+	st := TxStats{
 		Sent:          e.statSent.Load(),
 		BusyRequeued:  e.statBusyRequeued.Load(),
 		BusyDropped:   e.statBusyDropped.Load(),
 		Failed:        e.statFailed.Load(),
 		QueueRejected: e.statQueueRejected.Load(),
 	}
+	if n := e.failedInARow.Load(); n > 0 {
+		st.FailedInARow = n
+		st.FailingSince = time.Unix(0, e.failingSince.Load())
+	}
+	return st
 }
 
 func (e *txEngine) queueLen() int {
@@ -185,6 +197,11 @@ func (e *txEngine) drain() {
 		err := e.sendFn(popped.data)
 
 		if err != nil {
+			// Store the start before the count, which stats reads first; drain is the only writer.
+			if e.failedInARow.Load() == 0 {
+				e.failingSince.Store(sendStart.UnixNano())
+			}
+			e.failedInARow.Add(1)
 			if e.retryable != nil && e.retryable(err) {
 				e.mu.Lock()
 				ok := e.queue.add(popped.data, popped.priority, time.Now().Add(txBusyBackoff))
@@ -207,6 +224,7 @@ func (e *txEngine) drain() {
 		}
 
 		e.statSent.Add(1)
+		e.failedInARow.Store(0)
 
 		if e.budget != nil {
 			actualMs := uint64(time.Since(sendStart).Milliseconds())

@@ -478,6 +478,7 @@ func (m *KissModem) OnHwResponse(subCmd byte, h HwFrameHandler) {
 	m.hwMu.Unlock()
 }
 
+// AddOutboundHandler registers h to see each frame as it is written to the modem, under the send lock, so h must not send.
 func (m *KissModem) AddOutboundHandler(h func([]byte)) {
 	m.outboundMu.Lock()
 	m.outboundH = append(m.outboundH, h)
@@ -493,13 +494,6 @@ func (m *KissModem) SendData(data []byte) error {
 	if m.closed.Load() {
 		return ErrModemClosed
 	}
-	m.outboundMu.RLock()
-	handlers := m.outboundH
-	m.outboundMu.RUnlock()
-	for _, h := range handlers {
-		h(data)
-	}
-
 	m.sendMu.Lock()
 	defer m.sendMu.Unlock()
 	if m.closed.Load() {
@@ -522,6 +516,12 @@ func (m *KissModem) SendData(data []byte) error {
 		result = make(chan error, 1)
 		m.txPending = result
 		m.txMu.Unlock()
+	}
+	m.outboundMu.RLock()
+	handlers := m.outboundH
+	m.outboundMu.RUnlock()
+	for _, h := range handlers {
+		h(data)
 	}
 	if err := m.transport.Send(EncodeFrame(m.kissPort, KISS_CMD_DATA, data)); err != nil {
 		// A failed write may still have delivered the frame to the firmware.

@@ -1,6 +1,7 @@
 package meshcore
 
 import (
+	"bytes"
 	"encoding/hex"
 	"math"
 	"strings"
@@ -479,4 +480,26 @@ func FuzzLPPDecode(f *testing.F) {
 			}
 		}
 	})
+}
+
+func TestLPPEncode_RoundsInsteadOfTruncating(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		add  func(*LPPEncoder)
+		want []byte
+	}{
+		{"voltage 4.1", func(e *LPPEncoder) { e.AddVoltage(1, 4.1) }, []byte{1, LPPVoltage, 0x01, 0x9A}},
+		{"temperature 23.45", func(e *LPPEncoder) { e.AddTemperature(1, 23.45) }, []byte{1, LPPTemperature, 0x00, 0xEB}},
+		{"pressure 1013.3", func(e *LPPEncoder) { e.AddBarometricPressure(1, 1013.3) }, []byte{1, LPPBarometricPressure, 0x27, 0x95}},
+		{"humidity 60.5", func(e *LPPEncoder) { e.AddRelativeHumidity(1, 60.5) }, []byte{1, LPPRelativeHumidity, 121}},
+		{"negative -4.1", func(e *LPPEncoder) { e.AddVoltage(1, -4.1) }, []byte{1, LPPVoltage, 0xFE, 0x66}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			e := NewLPPEncoder()
+			tc.add(e)
+			if got := e.Bytes(); !bytes.Equal(got, tc.want) {
+				t.Errorf("encoded % X, want % X", got, tc.want)
+			}
+		})
+	}
 }
