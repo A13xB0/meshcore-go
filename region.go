@@ -87,6 +87,13 @@ func (r *Region) CalcTransportCode(pkt *Packet) uint16 {
 	return r.Key.CalcTransportCode(pkt.PayloadType(), pkt.Payload)
 }
 
+// ScopeFlood makes pkt a transport flood inside r, leaving code 2 at 0 as the firmware does.
+func (r *Region) ScopeFlood(pkt *Packet) {
+	pkt.Header = MakeHeader(RouteTypeTransportFlood, pkt.PayloadType(), pkt.PayloadVer())
+	pkt.TransportCode1 = r.CalcTransportCode(pkt)
+	pkt.TransportCode2 = 0
+}
+
 func (r *Region) MatchesPacket(pkt *Packet) bool {
 	return pkt.IsTransport() && pkt.TransportCode1 == r.CalcTransportCode(pkt)
 }
