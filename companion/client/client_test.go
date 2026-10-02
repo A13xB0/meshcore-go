@@ -1,6 +1,7 @@
 package client
 
 import (
+	"bytes"
 	"context"
 	"encoding/binary"
 	"errors"
@@ -1684,6 +1685,9 @@ func TestRemoveContact(t *testing.T) {
 	mt.mu.Lock()
 	if mt.sent[0][0] != companion.CmdRemoveContact {
 		t.Errorf("command code = 0x%02x, want 0x%02x", mt.sent[0][0], companion.CmdRemoveContact)
+	}
+	if len(mt.sent[0]) != 33 || !bytes.Equal(mt.sent[0][1:], pk[:]) {
+		t.Errorf("sent % x, want the code then the full 32-byte key", mt.sent[0])
 	}
 	mt.mu.Unlock()
 }

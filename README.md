@@ -12,7 +12,9 @@ meshcore-go/
     constants.go              # Command / response / push / error codes, txt types
     frame.go                  # 0x3c/0x3e framing + streaming FrameParser
     commands.go               # Command encoders (ToBytes)
+    commands_decode.go        # Command decoders (ParseCommand), for serving apps
     responses.go              # Response and push parsers (ParseResponse)
+    responses_encode.go       # Response and push encoders (ToBytes), for serving apps
     client/
       client.go               # Client: typed methods for every command, push handlers
       modem.go                # CompanionModem: adapts Client to node.Modem
@@ -226,7 +228,23 @@ SNR on the wire is quarter-dB; `SNRFromWire` and `PathSNRdB` convert to real dB.
 
 ### Companion protocol (`companion`)
 
-58 commands, 29 responses, 17 pushes. `ParseResponse` dispatches through a code-to-parser table; unknown codes come back with the raw payload. Path-length bytes in advert-path, path-discovery and trace frames are decoded with the firmware's hash-size encoding, and signed plain text exposes the sender prefix separately from the text.
+58 commands, 29 responses, 17 pushes, each both encoded and decoded, so the package serves either end of the link. `ParseResponse` dispatches through a code-to-parser table; unknown codes come back with the raw payload. Path-length bytes in advert-path, path-discovery and trace frames are decoded with the firmware's hash-size encoding, and signed plain text exposes the sender prefix separately from the text.
+
+For the device's end, `ParseCommand` decodes a frame from an app and accepts exactly what the firmware does. A frame the firmware would refuse comes back as a `*CommandError` holding the `ErrCode*` to answer with, and every response and push type has `ToBytes` laid out as the firmware writes it:
+
+```go
+cmd, err := companion.ParseCommand(frame)
+var cerr *companion.CommandError
+if errors.As(err, &cerr) {
+    reply := companion.ErrResponse{ErrorCode: cerr.ErrCode, HasErrorCode: true}.ToBytes()
+    // write reply back to the app
+}
+switch cmd.(type) {
+case companion.DeviceQueryCommand:
+    reply := companion.DeviceInfoResponse{FirmwareVersion: 13, MaxContacts: 350, MaxChannels: 40}.ToBytes()
+    // ...
+}
+```
 
 ### Client (`companion/client`)
 

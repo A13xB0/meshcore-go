@@ -158,6 +158,13 @@ func TestCommandsToBytes(t *testing.T) {
 			wantHex: "0fa1a2a3a4a5a6",
 		},
 		{
+			name: "remove contact by key",
+			build: func() []byte {
+				return RemoveContactCommand{PublicKey: [32]byte{0xa1, 0xa2, 31: 0xff}}.ToBytes()
+			},
+			wantHex: "0fa1a2" + strings.Repeat("00", 29) + "ff",
+		},
+		{
 			name: "get channel idx 0",
 			build: func() []byte {
 				return GetChannelCommand{ChannelIdx: 0}.ToBytes()
@@ -609,6 +616,13 @@ func TestCommandsToBytes(t *testing.T) {
 			wantHex: "157c150000e2040000",
 		},
 		{
+			name: "set tuning params rounds to the nearest thousandth",
+			build: func() []byte {
+				return SetTuningParamsCommand{RxDelayBase: 0.251, AirtimeFactor: 2.009}.ToBytes()
+			},
+			wantHex: "15fb000000d9070000",
+		},
+		{
 			name: "set tuning params zero",
 			build: func() []byte {
 				return SetTuningParamsCommand{RxDelayBase: 0, AirtimeFactor: 0}.ToBytes()
@@ -687,6 +701,69 @@ func TestCommandsToBytes(t *testing.T) {
 				return SendRawPacketCommand{Priority: 0}.ToBytes()
 			},
 			wantHex: "4100",
+		},
+		{
+			name: "add update contact without location",
+			build: func() []byte {
+				return AddUpdateContactCommand{Type: 1, LastAdvert: 0x01020304, OmitLocation: true}.ToBytes()
+			},
+			wantHex: "09" + strings.Repeat("00", 32) + "010000" + strings.Repeat("00", 64) + strings.Repeat("00", 32) + "04030201",
+		},
+		{
+			name: "add update contact without lastmod",
+			build: func() []byte {
+				return AddUpdateContactCommand{Latitude: 1, Longitude: -1, OmitLastModified: true}.ToBytes()
+			},
+			wantHex: "09" + strings.Repeat("00", 32) + "000000" + strings.Repeat("00", 64) + strings.Repeat("00", 32) + "00000000" + "01000000" + "ffffffff",
+		},
+		{
+			name: "set radio params with client repeat",
+			build: func() []byte {
+				return SetRadioParamsCommand{Frequency: 869618, Bandwidth: 62500, SpreadFactor: 8, CodingRate: 8, ClientRepeat: true}.ToBytes()
+			},
+			wantHex: "0b" + "f2440d00" + "24f40000" + "0808" + "01",
+		},
+		{
+			name: "set advert lat lon with altitude",
+			build: func() []byte {
+				return SetAdvertLatLonCommand{Latitude: 56205568, Longitude: -3161287, Altitude: 120, HasAltitude: true}.ToBytes()
+			},
+			wantHex: "0e" + "00a15903" + "39c3cfff" + "78000000",
+		},
+		{
+			name: "export self",
+			build: func() []byte {
+				return ExportContactCommand{Self: true}.ToBytes()
+			},
+			wantHex: "11",
+		},
+		{
+			name: "set other params telemetry modes",
+			build: func() []byte {
+				return SetOtherParamsCommand{ManualAddContacts: 1, HasTelemetryModes: true, TelemetryModeBase: 2, TelemetryModeLocation: 1, TelemetryModeEnvironment: 3}.ToBytes()
+			},
+			wantHex: "260136",
+		},
+		{
+			name: "set other params multi acks sends the fields before it",
+			build: func() []byte {
+				return SetOtherParamsCommand{HasMultiAcks: true, MultiAcks: 2}.ToBytes()
+			},
+			wantHex: "2600000002",
+		},
+		{
+			name: "send self telemetry req",
+			build: func() []byte {
+				return SendTelemetryReqCommand{Self: true}.ToBytes()
+			},
+			wantHex: "27000000",
+		},
+		{
+			name: "set auto add config keeping max hops",
+			build: func() []byte {
+				return SetAutoAddConfigCommand{Config: AutoAddChat | AutoAddRepeater, OmitMaxHops: true}.ToBytes()
+			},
+			wantHex: "3a06",
 		},
 	}
 
