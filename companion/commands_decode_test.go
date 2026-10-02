@@ -209,6 +209,7 @@ func TestParseCommandFirmwareRefusals(t *testing.T) {
 		{"channel data too short", []byte{CmdSendChannelData, 0, 0xff}, ErrCodeIllegalArg},
 		{"channel data with an invalid path length", []byte{CmdSendChannelData, 0, 0xc1, 0, 0}, ErrCodeIllegalArg},
 		{"channel data path past the end", []byte{CmdSendChannelData, 0, 0x05, 1, 2}, ErrCodeIllegalArg},
+		{"channel data cut before the data type", []byte{CmdSendChannelData, 0, 0x01, 0xaa}, ErrCodeIllegalArg},
 		{"raw packet too short", []byte{CmdSendRawPacket, 0, 1}, ErrCodeUnsupportedCmd},
 	}
 	for _, tt := range tests {
@@ -292,6 +293,23 @@ func TestParseCommandFirmwareLayouts(t *testing.T) {
 				t.Errorf("got %#v\nwant %#v", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestParseCommandCodeByteAlone(t *testing.T) {
+	for code := range commandParsers {
+		c, err := ParseCommand([]byte{code})
+		var ce *CommandError
+		switch {
+		case err == nil:
+			if c.ToBytes()[0] != code {
+				t.Errorf("0x%02x decoded to a command for 0x%02x", code, c.ToBytes()[0])
+			}
+		case !errors.As(err, &ce):
+			t.Errorf("0x%02x: error %v is not a *CommandError", code, err)
+		case ce.Cmd != code || ce.Error() == "":
+			t.Errorf("0x%02x: error %#v does not name its command", code, ce)
+		}
 	}
 }
 
