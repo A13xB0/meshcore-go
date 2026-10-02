@@ -158,6 +158,13 @@ func TestCommandsToBytes(t *testing.T) {
 			wantHex: "0fa1a2a3a4a5a6",
 		},
 		{
+			name: "remove contact by key",
+			build: func() []byte {
+				return RemoveContactCommand{PublicKey: [32]byte{0xa1, 0xa2, 31: 0xff}}.ToBytes()
+			},
+			wantHex: "0fa1a2" + strings.Repeat("00", 29) + "ff",
+		},
+		{
 			name: "get channel idx 0",
 			build: func() []byte {
 				return GetChannelCommand{ChannelIdx: 0}.ToBytes()

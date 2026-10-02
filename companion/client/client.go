@@ -519,9 +519,9 @@ func (c *Client) AddUpdateContactFull(ctx context.Context, cmd companion.AddUpda
 	return err
 }
 
-// RemoveContact removes a contact by public key prefix and waits for Ok.
+// RemoveContact removes a contact by public key and waits for Ok.
 func (c *Client) RemoveContact(ctx context.Context, peer meshcore.Identity) error {
-	cmd := companion.RemoveContactCommand{PubKeyPrefix: peer.Prefix()}
+	cmd := companion.RemoveContactCommand{PublicKey: peer.PublicKey()}
 	_, err := c.sendAndWait(ctx, cmd.ToBytes(), companion.RespOk, companion.RespErr)
 	return err
 }

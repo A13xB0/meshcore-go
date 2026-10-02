@@ -124,14 +124,23 @@ func (c AddUpdateContactCommand) ToBytes() []byte {
 	return buf
 }
 
+// RemoveContactCommand removes a contact; the firmware matches all 32 bytes of the key.
 type RemoveContactCommand struct {
+	PublicKey [32]byte
+	// Deprecated: firmware never matches a prefix; set PublicKey.
 	PubKeyPrefix [6]byte
 }
 
 func (c RemoveContactCommand) ToBytes() []byte {
-	buf := make([]byte, 7)
+	if c.PublicKey == ([32]byte{}) {
+		buf := make([]byte, 7)
+		buf[0] = CmdRemoveContact
+		copy(buf[1:7], c.PubKeyPrefix[:])
+		return buf
+	}
+	buf := make([]byte, 33)
 	buf[0] = CmdRemoveContact
-	copy(buf[1:7], c.PubKeyPrefix[:])
+	copy(buf[1:33], c.PublicKey[:])
 	return buf
 }
 
