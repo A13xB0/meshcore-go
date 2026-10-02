@@ -1,6 +1,7 @@
 package client
 
 import (
+	"bytes"
 	"context"
 	"encoding/binary"
 	"errors"
@@ -1685,6 +1686,9 @@ func TestRemoveContact(t *testing.T) {
 	if mt.sent[0][0] != companion.CmdRemoveContact {
 		t.Errorf("command code = 0x%02x, want 0x%02x", mt.sent[0][0], companion.CmdRemoveContact)
 	}
+	if len(mt.sent[0]) != 33 || !bytes.Equal(mt.sent[0][1:], pk[:]) {
+		t.Errorf("sent % x, want the code then the full 32-byte key", mt.sent[0])
+	}
 	mt.mu.Unlock()
 }
 
@@ -2490,5 +2494,27 @@ func TestAddUpdateContactLayout(t *testing.T) {
 	}
 	if frame[33] != meshcore.AdvertTypeChat || frame[35] != companion.OutPathUnknown || string(frame[100:103]) != "Bob" {
 		t.Errorf("type=%d out_path_len=0x%02x name=%q", frame[33], frame[35], frame[100:132])
+	}
+}
+
+// A firmware built without key export or import answers RESP_CODE_DISABLED straight away.
+func TestPrivateKeyCommands_Disabled(t *testing.T) {
+	mt := &mockTransport{}
+	c := New(mt)
+	mt.onSend = func(_ []byte) {
+		go mt.fireResponse(companion.Response{Code: companion.RespDisabled, Data: companion.DisabledResponse{}})
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	start := time.Now()
+	if _, err := c.ExportPrivateKey(ctx); !errors.Is(err, ErrDisabled) {
+		t.Errorf("ExportPrivateKey error = %v, want ErrDisabled", err)
+	}
+	if err := c.ImportPrivateKey(ctx, [64]byte{1}); !errors.Is(err, ErrDisabled) {
+		t.Errorf("ImportPrivateKey error = %v, want ErrDisabled", err)
+	}
+	if time.Since(start) > 500*time.Millisecond {
+		t.Error("the disabled answers waited for the timeout")
 	}
 }

@@ -2,6 +2,7 @@ package companion
 
 import (
 	"encoding/binary"
+	"math"
 
 	meshcore "github.com/meshcore-go/meshcore-go"
 )
@@ -106,9 +107,18 @@ type AddUpdateContactCommand struct {
 	Latitude     int32 // degrees * 1e6
 	Longitude    int32
 	LastModified uint32
+	// OmitLocation ends the frame after LastAdvert, which also drops LastModified.
+	OmitLocation     bool
+	OmitLastModified bool // the firmware then stamps its own clock
 }
 
 func (c AddUpdateContactCommand) ToBytes() []byte {
+	n := 148
+	if c.OmitLocation {
+		n = 136
+	} else if c.OmitLastModified {
+		n = 144
+	}
 	buf := make([]byte, 148)
 	buf[0] = CmdAddUpdateContact
 	copy(buf[1:33], c.PublicKey[:])
@@ -121,17 +131,26 @@ func (c AddUpdateContactCommand) ToBytes() []byte {
 	binary.LittleEndian.PutUint32(buf[136:140], uint32(c.Latitude))
 	binary.LittleEndian.PutUint32(buf[140:144], uint32(c.Longitude))
 	binary.LittleEndian.PutUint32(buf[144:148], c.LastModified)
-	return buf
+	return buf[:n]
 }
 
+// RemoveContactCommand removes a contact; the firmware matches all 32 bytes of the key.
 type RemoveContactCommand struct {
+	PublicKey [32]byte
+	// Deprecated: firmware never matches a prefix; set PublicKey.
 	PubKeyPrefix [6]byte
 }
 
 func (c RemoveContactCommand) ToBytes() []byte {
-	buf := make([]byte, 7)
+	if c.PublicKey == ([32]byte{}) {
+		buf := make([]byte, 7)
+		buf[0] = CmdRemoveContact
+		copy(buf[1:7], c.PubKeyPrefix[:])
+		return buf
+	}
+	buf := make([]byte, 33)
 	buf[0] = CmdRemoveContact
-	copy(buf[1:7], c.PubKeyPrefix[:])
+	copy(buf[1:33], c.PublicKey[:])
 	return buf
 }
 
@@ -209,15 +228,19 @@ type SetRadioParamsCommand struct {
 	Bandwidth    uint32
 	SpreadFactor byte
 	CodingRate   byte
+	ClientRepeat bool // v9+; an absent byte turns repeat off, as false does
 }
 
 func (c SetRadioParamsCommand) ToBytes() []byte {
-	buf := make([]byte, 11)
+	buf := make([]byte, 11, 12)
 	buf[0] = CmdSetRadioParams
 	binary.LittleEndian.PutUint32(buf[1:5], c.Frequency)
 	binary.LittleEndian.PutUint32(buf[5:9], c.Bandwidth)
 	buf[9] = c.SpreadFactor
 	buf[10] = c.CodingRate
+	if c.ClientRepeat {
+		buf = append(buf, 1)
+	}
 	return buf
 }
 
@@ -241,15 +264,24 @@ func (c ResetPathCommand) ToBytes() []byte {
 }
 
 type SetAdvertLatLonCommand struct {
-	Latitude  int32
-	Longitude int32
+	Latitude    int32
+	Longitude   int32
+	Altitude    int32 // accepted by the firmware but not yet stored
+	HasAltitude bool
 }
 
 func (c SetAdvertLatLonCommand) ToBytes() []byte {
-	buf := make([]byte, 9)
+	n := 9
+	if c.HasAltitude {
+		n = 13
+	}
+	buf := make([]byte, n)
 	buf[0] = CmdSetAdvertLatLon
 	binary.LittleEndian.PutUint32(buf[1:5], uint32(c.Latitude))
 	binary.LittleEndian.PutUint32(buf[5:9], uint32(c.Longitude))
+	if c.HasAltitude {
+		binary.LittleEndian.PutUint32(buf[9:13], uint32(c.Altitude))
+	}
 	return buf
 }
 
@@ -266,9 +298,13 @@ func (c ShareContactCommand) ToBytes() []byte {
 
 type ExportContactCommand struct {
 	PublicKey [32]byte
+	Self      bool // export this node's own advert
 }
 
 func (c ExportContactCommand) ToBytes() []byte {
+	if c.Self {
+		return []byte{CmdExportContact}
+	}
 	buf := make([]byte, 33)
 	buf[0] = CmdExportContact
 	copy(buf[1:33], c.PublicKey[:])
@@ -432,19 +468,47 @@ func (c SetDevicePinCommand) ToBytes() []byte {
 	return buf
 }
 
+// SetOtherParamsCommand sets the firmware's trailing prefs; each Has flag also sends the fields before it.
 type SetOtherParamsCommand struct {
 	ManualAddContacts byte
+
+	HasTelemetryModes        bool
+	TelemetryModeBase        byte // 0-3
+	TelemetryModeLocation    byte // 0-3
+	TelemetryModeEnvironment byte // 0-3
+
+	HasAdvertLocPolicy bool
+	AdvertLocPolicy    byte
+
+	HasMultiAcks bool
+	MultiAcks    byte
 }
 
 func (c SetOtherParamsCommand) ToBytes() []byte {
-	return []byte{CmdSetOtherParams, c.ManualAddContacts}
+	buf := []byte{CmdSetOtherParams, c.ManualAddContacts}
+	if !c.HasTelemetryModes && !c.HasAdvertLocPolicy && !c.HasMultiAcks {
+		return buf
+	}
+	buf = append(buf, (c.TelemetryModeEnvironment&0x03)<<4|(c.TelemetryModeLocation&0x03)<<2|c.TelemetryModeBase&0x03)
+	if !c.HasAdvertLocPolicy && !c.HasMultiAcks {
+		return buf
+	}
+	buf = append(buf, c.AdvertLocPolicy)
+	if !c.HasMultiAcks {
+		return buf
+	}
+	return append(buf, c.MultiAcks)
 }
 
 type SendTelemetryReqCommand struct {
 	PublicKey [32]byte
+	Self      bool // ask for this node's own telemetry
 }
 
 func (c SendTelemetryReqCommand) ToBytes() []byte {
+	if c.Self {
+		return []byte{CmdSendTelemetryReq, 0, 0, 0}
+	}
 	buf := make([]byte, 36)
 	buf[0] = CmdSendTelemetryReq
 	copy(buf[4:36], c.PublicKey[:])
@@ -560,11 +624,15 @@ func (c SendAnonReqCommand) ToBytes() []byte {
 }
 
 type SetAutoAddConfigCommand struct {
-	Config  byte
-	MaxHops byte
+	Config      byte
+	MaxHops     byte
+	OmitMaxHops bool // leave the stored max hops unchanged
 }
 
 func (c SetAutoAddConfigCommand) ToBytes() []byte {
+	if c.OmitMaxHops {
+		return []byte{CmdSetAutoAddConfig, c.Config}
+	}
 	return []byte{CmdSetAutoAddConfig, c.Config, c.MaxHops}
 }
 
@@ -625,10 +693,13 @@ type SetTuningParamsCommand struct {
 func (c SetTuningParamsCommand) ToBytes() []byte {
 	buf := make([]byte, 9)
 	buf[0] = CmdSetTuningParams
-	binary.LittleEndian.PutUint32(buf[1:5], uint32(c.RxDelayBase*1000))
-	binary.LittleEndian.PutUint32(buf[5:9], uint32(c.AirtimeFactor*1000))
+	binary.LittleEndian.PutUint32(buf[1:5], milli(c.RxDelayBase))
+	binary.LittleEndian.PutUint32(buf[5:9], milli(c.AirtimeFactor))
 	return buf
 }
+
+// milli rounds: float32(0.251)*1000 truncates to 250.
+func milli(v float32) uint32 { return uint32(math.Round(float64(v) * 1000)) }
 
 type GetTuningParamsCommand struct{}
 

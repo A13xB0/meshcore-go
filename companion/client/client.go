@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -519,9 +520,9 @@ func (c *Client) AddUpdateContactFull(ctx context.Context, cmd companion.AddUpda
 	return err
 }
 
-// RemoveContact removes a contact by public key prefix and waits for Ok.
+// RemoveContact removes a contact by public key and waits for Ok.
 func (c *Client) RemoveContact(ctx context.Context, peer meshcore.Identity) error {
-	cmd := companion.RemoveContactCommand{PubKeyPrefix: peer.Prefix()}
+	cmd := companion.RemoveContactCommand{PublicKey: peer.PublicKey()}
 	_, err := c.sendAndWait(ctx, cmd.ToBytes(), companion.RespOk, companion.RespErr)
 	return err
 }
@@ -578,10 +579,13 @@ func (c *Client) SetChannel(ctx context.Context, idx byte, name string, secret [
 func (c *Client) ExportPrivateKey(ctx context.Context) (companion.PrivateKeyResponse, error) {
 	resp, err := c.sendAndWait(ctx,
 		companion.ExportPrivateKeyCommand{}.ToBytes(),
-		companion.RespPrivateKey, companion.RespErr,
+		companion.RespPrivateKey, companion.RespDisabled, companion.RespErr,
 	)
 	if err != nil {
 		return companion.PrivateKeyResponse{}, err
+	}
+	if resp.Code == companion.RespDisabled {
+		return companion.PrivateKeyResponse{}, ErrDisabled
 	}
 	return as[companion.PrivateKeyResponse](resp)
 }
@@ -589,7 +593,10 @@ func (c *Client) ExportPrivateKey(ctx context.Context) (companion.PrivateKeyResp
 // ImportPrivateKey imports a private key into the device and waits for Ok.
 func (c *Client) ImportPrivateKey(ctx context.Context, key [64]byte) error {
 	cmd := companion.ImportPrivateKeyCommand{PrivateKey: key}
-	_, err := c.sendAndWait(ctx, cmd.ToBytes(), companion.RespOk, companion.RespErr)
+	resp, err := c.sendAndWait(ctx, cmd.ToBytes(), companion.RespOk, companion.RespDisabled, companion.RespErr)
+	if err == nil && resp.Code == companion.RespDisabled {
+		return ErrDisabled
+	}
 	return err
 }
 
@@ -916,6 +923,9 @@ func (c *Client) SendPacket(ctx context.Context, priority uint8, packet *meshcor
 	}
 	return c.SendRawPacket(ctx, priority, raw)
 }
+
+// ErrDisabled is RESP_CODE_DISABLED: the firmware was built without the feature, such as key export or import.
+var ErrDisabled = errors.New("device has this feature turned off")
 
 type DeviceError struct {
 	Code    byte
