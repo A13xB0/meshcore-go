@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"math"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	meshcore "github.com/meshcore-go/meshcore-go"
@@ -58,6 +59,7 @@ type Node struct {
 
 	advertData     *meshcore.AdvertAppData
 	advertInterval time.Duration
+	floodScope     atomic.Pointer[meshcore.Region]
 
 	cbMu         sync.RWMutex
 	errH         func(error)
@@ -88,6 +90,7 @@ type nodeConfig struct {
 	directDelay      RetransmitDelayFunc
 	rxDelay          RxDelayFunc
 	extraAcks        func() uint8
+	floodScope       *meshcore.Region
 }
 
 // Option configures a Node.
@@ -271,6 +274,7 @@ func New(identity meshcore.LocalIdentity, radio Radio, opts ...Option) *Node {
 		done:           make(chan struct{}),
 	}
 	n.peers.learnedPathsOnly = cfg.learnedPathsOnly
+	n.floodScope.Store(cfg.floodScope)
 	for i, ch := range cfg.channels {
 		if !n.channels.set(i, ch) {
 			break
@@ -489,6 +493,7 @@ func (n *Node) SendGroupText(
 	retryTimeout time.Duration,
 	maxRetries int,
 	onResult func(GroupSendResult),
+	opts ...SendOption,
 ) error {
 	if pathHashSize == 0 {
 		pathHashSize = 1
@@ -509,6 +514,7 @@ func (n *Node) SendGroupText(
 		Path:       []byte{},
 		Payload:    grpBytes,
 	}
+	n.makeFlood(pkt, opts)
 
 	if err := n.SendPacket(pkt); err != nil {
 		return err
@@ -539,6 +545,7 @@ func (n *Node) SendTextMessage(
 	pathHashSize uint8,
 	timeout time.Duration,
 	onResult func(DMSendResult),
+	opts ...SendOption,
 ) error {
 	if pathHashSize == 0 {
 		pathHashSize = 1 // 0 is invalid: it would divide-by-zero below and corrupt PathLength
@@ -577,7 +584,7 @@ func (n *Node) SendTextMessage(
 			pkt.PathLength |= uint8(len(path) / int(pathHashSize))
 		} else {
 			pkt.Header = meshcore.MakeHeader(meshcore.RouteTypeFlood, meshcore.PayloadTypeTxtMsg, 0)
-			pkt.Path = []byte{}
+			n.makeFlood(pkt, opts)
 		}
 		return pkt, ackCRC, nil
 	}

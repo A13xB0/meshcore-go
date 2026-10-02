@@ -213,3 +213,54 @@ func TestNewRegionFromKey(t *testing.T) {
 		t.Fatal("NewRegionFromKey re-derived the key from the name")
 	}
 }
+
+func TestRegion_ScopeFlood_MatchesFirmwareOnAir(t *testing.T) {
+	tests := []struct {
+		region string
+		wire   string
+	}{
+		{"sco", "104ea7000080d41ee22644b0ea3aee70958cc5f4e87a1cfdbb1f404396dc0a7be3e7030df7418affbf6aa11bcf6cde27a47cc7211ec96ca1bde9803974ef81749b3db281439c4a9b83f1c834348bbb6b403c0997a546b95fcd4a878b2c1ed40236c5a7618150aa342d0092507a5503b6f8ceff4e554d432d4d43"},
+		{"fif", "1420f0000080cbf5616764dfb491465108a62c8c659083523012337f3179e3287689a5eeb629c4f9b002b87560c75779eecc450d8c4bb9c7fed1855e9dac2d71002c18030b1aa445f3"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.region, func(t *testing.T) {
+			wire, _ := hex.DecodeString(tt.wire)
+			heard, err := PacketFromBytes(wire)
+			if err != nil {
+				t.Fatal(err)
+			}
+			pkt := heard.Clone()
+			pkt.Header = MakeHeader(RouteTypeFlood, heard.PayloadType(), heard.PayloadVer())
+			pkt.TransportCode1, pkt.TransportCode2 = 0xffff, 0xffff
+
+			NewRegionFromHashtag(tt.region).ScopeFlood(pkt)
+
+			got, err := pkt.ToBytes()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !bytes.Equal(got, wire) {
+				t.Errorf("ScopeFlood gave\n%x\nthe firmware sent\n%x", got, wire)
+			}
+		})
+	}
+}
+
+func TestRegion_ScopeFlood(t *testing.T) {
+	r := NewRegionFromHashtag("sco")
+	pkt := &Packet{
+		Header:     MakeHeader(RouteTypeFlood, PayloadTypeGrpTxt, 1),
+		PathLength: 0x40,
+		Payload:    []byte{0x11, 0x22, 0x33},
+	}
+	r.ScopeFlood(pkt)
+	if pkt.RouteType() != RouteTypeTransportFlood || pkt.PayloadType() != PayloadTypeGrpTxt || pkt.PayloadVer() != 1 {
+		t.Errorf("header 0x%02x, want a transport flood keeping payload type and version", pkt.Header)
+	}
+	if !r.MatchesPacket(pkt) || pkt.TransportCode2 != 0 {
+		t.Errorf("codes %04x %04x, want code 1 for the region and code 2 zero", pkt.TransportCode1, pkt.TransportCode2)
+	}
+	if pkt.PathLength != 0x40 {
+		t.Errorf("path length 0x%02x changed", pkt.PathLength)
+	}
+}

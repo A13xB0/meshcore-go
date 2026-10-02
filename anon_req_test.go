@@ -1,6 +1,8 @@
 package meshcore
 
 import (
+	"bytes"
+	"crypto/ed25519"
 	"encoding/hex"
 	"errors"
 	"strings"
@@ -328,5 +330,34 @@ func TestAnonReqRoundTrip(t *testing.T) {
 func TestAnonReqFromBytes_ShortIsErrTooShort(t *testing.T) {
 	if _, err := AnonReqFromBytes(make([]byte, 34)); !errors.Is(err, ErrTooShort) {
 		t.Fatalf("error = %v, want ErrTooShort", err)
+	}
+}
+
+func TestNewAnonReq(t *testing.T) {
+	var aSeed, bSeed [ed25519.SeedSize]byte
+	aSeed[0], bSeed[0] = 3, 4
+	alice, bob := NewLocalIdentityFromSeed(aSeed), NewLocalIdentityFromSeed(bSeed)
+	shared, err := alice.SharedSecret(bob.Identity)
+	if err != nil {
+		t.Fatal(err)
+	}
+	plain := append([]byte{0x01, 0x02, 0x03, 0x04}, "password"...)
+
+	req, err := NewAnonReq(alice, bob.Identity, plain, shared)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if req.Destination != bob.PublicKey()[0] || req.EphemeralPubKey != alice.PublicKey() {
+		t.Fatalf("dest 0x%02x sender %x, want bob's hash and alice's key", req.Destination, req.EphemeralPubKey)
+	}
+	wire, _ := req.ToBytes()
+	back, err := AnonReqFromBytes(wire)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bobShared, _ := bob.SharedSecret(NewIdentity(back.EphemeralPubKey))
+	got := back.Decrypt(bobShared)
+	if !bytes.Equal(got[:len(plain)], plain) {
+		t.Fatalf("Decrypt = %x, want prefix %x", got, plain)
 	}
 }

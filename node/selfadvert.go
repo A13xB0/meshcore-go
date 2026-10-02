@@ -52,6 +52,7 @@ func (n *Node) sendAdvert() {
 		PathLength: meshcore.PathHashSize - 1,
 		Payload:    payload,
 	}
+	n.makeFlood(pkt, nil)
 
 	if err := n.SendPacket(pkt); err != nil {
 		n.dispatchError(err)

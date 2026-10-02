@@ -1,6 +1,7 @@
 package meshcore
 
 import (
+	"bytes"
 	"encoding/hex"
 	"strings"
 	"testing"
@@ -270,5 +271,35 @@ func TestGroupDataRoundTrip(t *testing.T) {
 	decryptedTrimmed := strings.TrimRight(string(decrypted), "\x00")
 	if decryptedTrimmed != string(plaintext) {
 		t.Errorf("Decrypt() = %q, want %q", decryptedTrimmed, plaintext)
+	}
+}
+
+func TestNewGroupData(t *testing.T) {
+	psk := bytes.Repeat([]byte{0x5a}, 16)
+	data := []byte("rns frame")
+
+	gd, err := NewGroupData(0x42, psk, 0x0102, data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gd.ChannelHash != 0x42 {
+		t.Fatalf("channel hash 0x%02x", gd.ChannelHash)
+	}
+	wire, _ := gd.ToBytes()
+	back, err := GroupDataFromBytes(wire)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := back.Decrypt(psk)
+	want := append([]byte{0x02, 0x01, byte(len(data))}, data...)
+	if !bytes.Equal(got[:len(want)], want) {
+		t.Fatalf("plaintext %x, want data type, length then data %x", got, want)
+	}
+
+	if _, err := NewGroupData(0x42, psk, 1, make([]byte, MaxGroupDataLen)); err != nil {
+		t.Errorf("MaxGroupDataLen bytes refused: %v", err)
+	}
+	if _, err := NewGroupData(0x42, psk, 1, make([]byte, MaxGroupDataLen+1)); err == nil {
+		t.Error("one byte over MaxGroupDataLen accepted")
 	}
 }

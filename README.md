@@ -350,6 +350,10 @@ Routing follows the firmware: only ACK, PATH, REQ, RESPONSE, TXT_MSG, ANON_REQ, 
 
 A `RadioMux` remembers every packet it transmits, as firmware's markSeen-on-send does for a device. A copy that a neighbour bounces back is still delivered to each virtual radio but arrives flagged do-not-retransmit, so a repeater Node never re-floods a packet that its companion Node on the same radio originated.
 
+Floods a node originates go out in its flood scope (`WithFloodScope`, `SetFloodScope`), as a companion floods inside its default scope: `SendGroupText`, the flood attempts of `SendTextMessage`, the periodic self advert, and `SendFlood` for packets built by hand. `InScope(region)` or `Unscoped()` overrides it for one send; with no scope set a node floods unscoped. `Region.ScopeFlood` scopes a single packet.
+
+To act for a companion app that does its own retrying, `SendTextOnce`, `SendRequest`, `SendAnonRequest` and `SendGroupData` send once, direct along a given path or as a scoped flood when the path is nil, and return whether they flooded and the firmware's timeout for the reply. `SendTextOnce` also returns the ACK CRC the recipient will send, and `SendRequest`/`SendAnonRequest` lead with a caller-supplied tag the response carries back.
+
 For airtime-aware operation through a `RadioMux`, pass the same estimator to both `WithMuxAirtimeEstimator` (the shared TX budget) and `WithAirtimeEstimator` on each node (RX and relay timing). Configuring the mux alone does not configure node timing.
 
 #### Handler contract

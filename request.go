@@ -21,6 +21,19 @@ func RequestFromBytes(data []byte) (*Request, error) {
 	}, nil
 }
 
+func NewRequest(self LocalIdentity, peer Identity, plaintext []byte, sharedSecret []byte) (*Request, error) {
+	encrypted, err := EncryptThenMAC(sharedSecret, plaintext)
+	if err != nil {
+		return nil, err
+	}
+	return &Request{
+		Destination:      peer.PublicKey()[0],
+		Source:           self.PublicKey()[0],
+		MAC:              [2]byte{encrypted[0], encrypted[1]},
+		EncryptedPayload: encrypted[cipherMACSize:],
+	}, nil
+}
+
 func (r *Request) ToBytes() ([]byte, error) {
 	return append([]byte{r.Destination, r.Source, r.MAC[0], r.MAC[1]}, r.EncryptedPayload...), nil
 }
