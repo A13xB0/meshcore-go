@@ -616,6 +616,13 @@ func TestCommandsToBytes(t *testing.T) {
 			wantHex: "157c150000e2040000",
 		},
 		{
+			name: "set tuning params rounds to the nearest thousandth",
+			build: func() []byte {
+				return SetTuningParamsCommand{RxDelayBase: 0.251, AirtimeFactor: 2.009}.ToBytes()
+			},
+			wantHex: "15fb000000d9070000",
+		},
+		{
 			name: "set tuning params zero",
 			build: func() []byte {
 				return SetTuningParamsCommand{RxDelayBase: 0, AirtimeFactor: 0}.ToBytes()

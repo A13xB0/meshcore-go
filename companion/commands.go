@@ -2,6 +2,7 @@ package companion
 
 import (
 	"encoding/binary"
+	"math"
 
 	meshcore "github.com/meshcore-go/meshcore-go"
 )
@@ -692,10 +693,13 @@ type SetTuningParamsCommand struct {
 func (c SetTuningParamsCommand) ToBytes() []byte {
 	buf := make([]byte, 9)
 	buf[0] = CmdSetTuningParams
-	binary.LittleEndian.PutUint32(buf[1:5], uint32(c.RxDelayBase*1000))
-	binary.LittleEndian.PutUint32(buf[5:9], uint32(c.AirtimeFactor*1000))
+	binary.LittleEndian.PutUint32(buf[1:5], milli(c.RxDelayBase))
+	binary.LittleEndian.PutUint32(buf[5:9], milli(c.AirtimeFactor))
 	return buf
 }
+
+// milli rounds: float32(0.251)*1000 truncates to 250.
+func milli(v float32) uint32 { return uint32(math.Round(float64(v) * 1000)) }
 
 type GetTuningParamsCommand struct{}
 
