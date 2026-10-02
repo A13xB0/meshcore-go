@@ -19,6 +19,26 @@ func GroupDataFromBytes(data []byte) (*GroupData, error) {
 	}, nil
 }
 
+// MaxGroupDataLen is the firmware's MAX_GROUP_DATA_LENGTH.
+const MaxGroupDataLen = MaxPacketPayload - cipherBlockSize - 3
+
+// NewGroupData encrypts data_type, length and data for a channel, the plaintext layout the firmware sends.
+func NewGroupData(channelHash byte, psk []byte, dataType uint16, data []byte) (*GroupData, error) {
+	if len(data) > MaxGroupDataLen {
+		return nil, fmt.Errorf("group data is %d bytes, max %d", len(data), MaxGroupDataLen)
+	}
+	plaintext := append([]byte{byte(dataType), byte(dataType >> 8), byte(len(data))}, data...)
+	encrypted, err := EncryptThenMAC(psk, plaintext)
+	if err != nil {
+		return nil, err
+	}
+	return &GroupData{
+		ChannelHash:      channelHash,
+		MAC:              [2]byte{encrypted[0], encrypted[1]},
+		EncryptedPayload: encrypted[cipherMACSize:],
+	}, nil
+}
+
 func (g *GroupData) ToBytes() ([]byte, error) {
 	return append([]byte{g.ChannelHash, g.MAC[0], g.MAC[1]}, g.EncryptedPayload...), nil
 }

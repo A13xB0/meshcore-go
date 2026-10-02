@@ -13,8 +13,9 @@ import (
 )
 
 const (
-	cipherKeySize = 16 // AES-128
-	cipherMACSize = 2  // truncated HMAC
+	cipherKeySize   = 16 // AES-128
+	cipherMACSize   = 2  // truncated HMAC
+	cipherBlockSize = 16 // AES block, the firmware's CIPHER_BLOCK_SIZE
 )
 
 var (

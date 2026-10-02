@@ -25,6 +25,20 @@ func AnonReqFromBytes(data []byte) (*AnonReq, error) {
 	return a, nil
 }
 
+// NewAnonReq carries the sender's own public key, as the firmware's createAnonDatagram does.
+func NewAnonReq(self LocalIdentity, peer Identity, plaintext []byte, sharedSecret []byte) (*AnonReq, error) {
+	encrypted, err := EncryptThenMAC(sharedSecret, plaintext)
+	if err != nil {
+		return nil, err
+	}
+	return &AnonReq{
+		Destination:      peer.PublicKey()[0],
+		EphemeralPubKey:  self.PublicKey(),
+		MAC:              [2]byte{encrypted[0], encrypted[1]},
+		EncryptedPayload: encrypted[cipherMACSize:],
+	}, nil
+}
+
 func (a *AnonReq) ToBytes() ([]byte, error) {
 	out := make([]byte, 0, anonReqHeaderSize+len(a.EncryptedPayload))
 	out = append(out, a.Destination)

@@ -1,6 +1,8 @@
 package meshcore
 
 import (
+	"bytes"
+	"crypto/ed25519"
 	"encoding/hex"
 	"strings"
 	"testing"
@@ -311,5 +313,34 @@ func TestRequestRoundTrip(t *testing.T) {
 	gotTrimmed := strings.TrimRight(string(got), "\x00")
 	if gotTrimmed != string(plaintext) {
 		t.Errorf("Decrypt() = %q, want %q", gotTrimmed, plaintext)
+	}
+}
+
+func TestNewRequest(t *testing.T) {
+	var aSeed, bSeed [ed25519.SeedSize]byte
+	aSeed[0], bSeed[0] = 1, 2
+	alice, bob := NewLocalIdentityFromSeed(aSeed), NewLocalIdentityFromSeed(bSeed)
+	shared, err := alice.SharedSecret(bob.Identity)
+	if err != nil {
+		t.Fatal(err)
+	}
+	plain := []byte{0x04, 0x03, 0x02, 0x01, 0x03, 0, 0, 0, 0}
+
+	req, err := NewRequest(alice, bob.Identity, plain, shared)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if req.Destination != bob.PublicKey()[0] || req.Source != alice.PublicKey()[0] {
+		t.Fatalf("dest 0x%02x src 0x%02x", req.Destination, req.Source)
+	}
+	wire, _ := req.ToBytes()
+	back, err := RequestFromBytes(wire)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bobShared, _ := bob.SharedSecret(alice.Identity)
+	got := back.Decrypt(bobShared)
+	if !bytes.Equal(got[:len(plain)], plain) {
+		t.Fatalf("Decrypt = %x, want prefix %x", got, plain)
 	}
 }
